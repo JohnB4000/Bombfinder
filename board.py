@@ -1,20 +1,15 @@
-import pygame, square, math, random
-from typing import List
+import pygame, square, random
 
+class MouseClickTypes:
+    LeftClick: int = 0
+    RightClick: int = 1
 
 class Board:
     tile: pygame.Surface = pygame.transform.scale(pygame.image.load('assets/tile.png'), (40, 40))
     mine: pygame.Surface = pygame.transform.scale(pygame.image.load('assets/mine.png'), (40, 40))
     flag: pygame.Surface = pygame.transform.scale(pygame.image.load('assets/flag.png'), (40, 40))
-    numbers: List[pygame.Surface] = [pygame.transform.scale(pygame.image.load('assets/blank.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/1.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/2.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/3.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/4.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/5.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/6.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/7.png'), (40, 40)),
-                pygame.transform.scale(pygame.image.load('assets/8.png'), (40, 40)) ]
+    numbers: list[pygame.Surface] = [pygame.transform.scale(pygame.image.load('assets/' + str(x) + '.png'), (40, 40)) for x in range(0, 9)]
+    # TODO Mode to configuration file
     rows: int = 16
     cols: int = 30
     cells: int = rows * cols
@@ -22,74 +17,67 @@ class Board:
 
     imageScale: int = 40
 
-    minesToPlace: int = cells / 10
+    minesToPlace: int = cells // 10
 
-    def __init__(self, screen: pygame.Surface):
+    gameOver: bool = False
+
+    def __init__(self, screen: pygame.Surface) -> None:
         self.screen = screen
-        self.board: List[square.Square] = [square.Square(screen) for _ in range(self.cells)]
+        self.board: list[square.Square] = [square.Square(screen) for _ in range(self.cells)]
 
     def display(self) -> None:
         for x in range(self.cells):
             self.board[x].display(((x % self.cols) * self.imageScale, (x // self.cols) * self.imageScale))
 
-    def leftClickedSquare(self) -> bool:
-        index: int = self.getIndexFromClick(pygame.mouse.get_pos())
+    def leftClickedSquare(self, index: int) -> None:
+        # If its the first click then place mines
         if self.firstClick:
             self.placeMines(index)
             self.firstClick = False
-        if self.board[index].revealed:
-            return False
-        if self.board[index].isFlag:
-            self.board[index].isFlag = False
-            return False
-        wasMine = self.board[index].reveal()
-        if wasMine:
-            return True
+        
+        # If its a flag then remove the flag and return
+        if self.board[index].isFlagged():
+            self.board[index].removeFlag()
+            return
+
+        # At this point the square clicked is hidden and not a flag so reveal it
+        self.board[index].reveal()
+
+        # If its a mine set game over to true
+        if self.board[index].isMine():
+            self.gameOver = True
+        
+        # If there are no connected mines then reveal the connecting squares
         if self.board[index].numAdjacentMines == 0:
             self.revealConnectedSquares(index)
-        return False
-
-    def rightClickedSquare(self) -> None:
-        index: int = self.getIndexFromClick(pygame.mouse.get_pos())
-        if self.board[index].revealed:
-            return
-        if self.board[index].isFlag:
-            self.board[index].isFlag = False
-        else:
-            self.board[index].isFlag = True
-        
-    def getIndexFromClick(self, position: int) -> int:
-        x: int = position[0]
-        y: int = position[1]
-        return math.floor(x/self.imageScale) + math.floor(y/self.imageScale) * self.cols
 
     def placeMines(self, startIndex: int) -> None:
-        squaresToCheck: List[int] = self.getAdjacentSquares(startIndex)
+        squaresToCheck: list[int] = self.getAdjacentSquares(startIndex)
         squaresToCheck.append(startIndex)
         while self.minesToPlace > 0:
             index: int = random.randrange(0, self.cells)
-            while self.board[index].isMine or index in squaresToCheck:
+            while self.board[index].isMine() or index in squaresToCheck:
                 index: int = random.randrange(0, self.cells)
-            self.board[index].isMine = True
+            self.board[index].placeMine()
             self.minesToPlace -= 1
         self.updateNeighbours()
 
     def updateNeighbours(self) -> None:
         for x in range(self.cells):
-            if self.board[x].isMine:
-                squaresToCheck: List[int] = self.getAdjacentSquares(x)
+            if self.board[x].isMine():
+                squaresToCheck: list[int] = self.getAdjacentSquares(x)
                 for square in squaresToCheck:
                     self.board[square].numAdjacentMines += 1
 
     def revealConnectedSquares(self, index: int) -> None:
-        squaresToCheck: List[int] = self.getAdjacentSquares(index)
+        squaresToCheck: list[int] = self.getAdjacentSquares(index)
         for square in squaresToCheck:
-            if not self.board[square].isMine and not self.board[square].revealed and self.board[index].numAdjacentMines == 0:
+            if not self.board[square].isMine() and not self.board[square].revealed and self.board[index].numAdjacentMines == 0:
                 self.board[square].revealed = True
                 self.revealConnectedSquares(square)
 
-    def getAdjacentSquares(self, index: int) -> List[int]:
-        squaresToCheck: List = []
+    def getAdjacentSquares(self, index: int) -> list[int]:
+        squaresToCheck: list = []
         row: int = index // self.cols
         col: int = index % self.cols
         if row != 0:
@@ -110,12 +98,26 @@ class Board:
             squaresToCheck.append(index+self.cols+1)
         return squaresToCheck
     
-    def checkForGameFinished(self) -> bool:
+    def isWon(self) -> bool:
         for x in range(self.cells):
-            if self.board[x].isMine:
-                if not self.board[x].isFlag:
+            if self.board[x].isMine():
+                if not self.board[x].isFlagged():
                     return False
             else:
-                if not self.board[x].revealed:
+                if not self.board[x].isRevealed():
                     return False
         return True
+    
+    def handleMouseClick(self, mouseButton: int, index: int) -> None:
+        # If its already revealed then return
+        if self.board[index].isRevealed():
+            return
+
+        if mouseButton == MouseClickTypes.LeftClick:
+            self.leftClickedSquare(index)
+        elif mouseButton == MouseClickTypes.RightClick:
+            # If its a flag, remove it else add a flag
+            self.board[index].toggleFlag()
+
+    def isGameOver(self) -> bool:
+        return self.gameOver
