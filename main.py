@@ -1,5 +1,11 @@
 from userInterface import UserInterface, initInterface
 
-ui: UserInterface = initInterface()
-ui.newGame(16, 30, 80)
+NUM_ROWS = 16
+NUM_COLS = 30
+NUM_BOMBS = 80
+
+IMAGE_SCALE = 40
+
+ui: UserInterface = initInterface(IMAGE_SCALE)
+ui.newGame(NUM_ROWS, NUM_COLS, NUM_BOMBS)
 ui.runGame()

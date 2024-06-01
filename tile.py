@@ -1,3 +1,4 @@
+# Class to store details of a tile
 class Tile:
     def __init__(self):
         self.bomb: bool = False
